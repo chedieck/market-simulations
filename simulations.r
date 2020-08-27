@@ -3,7 +3,9 @@ require("gplots")
 
 
 # bitcoin 8h last 3 years generator
-opens = read.csv('db/prices/BU-8h.csv', sep='\t')$OPEN
+price_file='BTCUSDT-8h'
+filename=paste('db/prices/', price_file, '.csv', sep="")
+opens = read.csv(filename, sep='\t')$OPEN
 
 # logreturn function to compute logreturns
 logreturn <- function(P1, P2){
@@ -92,47 +94,83 @@ plotHeat <- function(s,...) UseMethod("plotHeat")
 plotHeat <- function(s, problist, days=31, n_iter=1000) {
     probResults = NULL
     for (p in problist) {
+        cat('at', p)
         probResults = cbind(probResults, montecarlo(s, p, days=days, n_iter=n_iter))
     }
-    m = NULL
+    heat = NULL
     least = min(probResults)
     last = max(probResults)
-    cat('last is ', last, ', least is ', least)
     breaks = seq(floor(least * 20)/ 20, ceiling(last * 20) / 20, by=0.05)
-    cat('breaks is ', breaks)
+    cat('breaks is ', breaks, '\n')
     for (col in 1:ncol(probResults)) {
         to_append =  hist(probResults[,col], plot=FALSE, breaks=breaks)$count
-        print(to_append)
-        m = cbind(m,to_append)
+        heat = cbind(heat,to_append)
     }
-    colnames(m) <- problist
-    rownames(m) <- (breaks[1:length(breaks) - 1] - 1) * 100
-    m <- m[nrow(m):1,]
-    return (list(m=m, res=probResults))
+    colnames(heat) <- problist
+    rownames(heat) <- round((breaks[1:length(breaks) - 1] - 1) * 100)
+    heat <- heat[nrow(heat):1,]
+    
+    #also return the averages
+    avg = round((colMeans(probResults) - 1) * 100)
+    return (list(heat=heat, avg=avg, axisx=problist))
 }
     
 
 
 # run simulations
-
-main <- function(days=15,n_iter=1000){
+main <- function(days=30,n_iter=1000){
     s = Simulation()
-    r = plotHeat(s, seq(0.54, 0.65, by=0.005), days=days, n_iter=n_iter)
+    r = plotHeat(s, seq(0.50, 0.82, by=0.005), days=days, n_iter=n_iter)
 
-    png(filename="temp.png")
-    heatmap.2(r$m,
-              main = paste("Market profits after", days, "days,\neach x simulated", n_iter, "times."),
+    # save heatmap
+    png(filename=paste("db/plots/hm", price_file, ".png", sep=""),
+        height=1200,
+        width=1200,
+        units='px',
+        res=250,
+        bg="transparent")
+
+    finalheat = heatmap.2(r$heat,
               xlab = "A.I. accuracy",
               ylab = "Profit (%)",
               dendrogram='none',
               Rowv=FALSE,
               key = FALSE,
+              col=bluered,
               Colv=FALSE,
               sepwidth=c(0,0.05),
-              rowsep=1:nrow(r$m),
+              rowsep=1:nrow(r$heat),
               sepcolor='black',
               trace='none')
     dev.off()
+    xaxis = as.numeric(rownames(finalheat$carpet))
+    yaxis = as.numeric(colnames(finalheat$carpet))
+
+
+    # save average plot
+    png(filename=paste("db/plots/avg", price_file, ".png", sep=""),
+        height=1200,
+        width=1200,
+        units='px',
+        res=250,
+        bg="transparent")
+
+    op <- par(mar = c(5,4,4,4) + 0.1)
+    lineplot = plot(r$axisx,
+                    r$avg,
+                    type='l',
+                    xlab = "A.I. accuracy",
+                    ylab = "",
+                    axes=FALSE,
+    )
+    print(yaxis)
+    axis(side=4, at=yaxis, tick=FALSE)
+    mtext("Profit (%)", side=4, line=3)
+    axis(side=1, at=xaxis, las=2, tick=FALSE, labels=rownames(finalheat$carpet))
+    grid(col="lightgray")
+    par(op)
+    dev.off()
+    return (list(heat=finalheat, avg=lineplot, r=r))
 }
 
 

@@ -1,1 +1,3 @@
 deprecated/
+log_reader.py
+db/30dayslog.log
